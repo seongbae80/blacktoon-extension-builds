@@ -1,16 +1,24 @@
-# BlackToon Extension Build
+# BlackToon Extension Build Repo
 
-Hermes/Codex-assisted BlackToon extension debug APK build.
+## Extension repository URL
 
-## Install APK
+Use this as the extension repo/index URL:
 
 ```text
-apk/tachiyomi-ko.blacktoon-v1.4.2-debug.apk
+https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/main/repo/index.min.json
 ```
 
-## Source changes
+Full index:
 
-See `patches/blacktoon-v1.4.2.patch`.
+```text
+https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/main/repo/index.json
+```
+
+Direct APK:
+
+```text
+https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/main/repo/apk/tachiyomi-ko.blacktoon-v1.4.2-debug.apk
+```
 
 ## Notes
 
