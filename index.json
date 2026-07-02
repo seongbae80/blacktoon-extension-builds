@@ -1,0 +1,32 @@
+{
+  "name": "Seongbae80 BlackToon Builds",
+  "badgeLabel": "SB",
+  "signingKey": "b22625ab27d8ada6072bb472b06951ed0f889fcbd5aa293460156158acd25bba",
+  "contact": {
+    "website": "https://github.com/seongbae80/blacktoon-extension-builds"
+  },
+  "extensionList": {
+    "extensions": [
+      {
+        "name": "BlackToon",
+        "packageName": "eu.kanade.tachiyomi.extension.ko.blacktoon",
+        "resources": {
+          "apkUrl": "https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/apk/tachiyomi-ko.blacktoon-v1.4.4-debug.apk",
+          "iconUrl": "https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/icon/eu.kanade.tachiyomi.extension.ko.blacktoon.png"
+        },
+        "extensionLib": "1.4",
+        "versionCode": "4",
+        "versionName": "1.4.4",
+        "contentWarning": "CONTENT_WARNING_NSFW",
+        "sources": [
+          {
+            "id": "7080800841003944426",
+            "name": "블랙툰",
+            "language": "ko",
+            "homeUrl": "https://blacktoon415.com"
+          }
+        ]
+      }
+    ]
+  }
+}

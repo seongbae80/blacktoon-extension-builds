@@ -1,0 +1,104 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index 1fb69ed3c6..56355a5586 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 3
++    versionCode = 4
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index 7df43b344f..0baf35342f 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -33,7 +33,7 @@ abstract class BlackToon :
+ 
+     private var currentBaseUrlHost: String? = null
+ 
+-    private val cdnUrl = "https://blacktoonimg.com/"
++    private val cdnUrl by lazy { getImageBaseUrl() }
+ 
+     private val preferences: SharedPreferences = getPreferences()
+ 
+@@ -79,6 +79,22 @@ abstract class BlackToon :
+         return host
+     }
+ 
++    private fun getImageBaseUrl(): String {
++        val config = client.newCall(GET("$baseUrl/data/config.js", headers)).execute().body.string()
++        return IMG_DOMAIN_REGEX.find(config)?.groupValues?.get(1)
++            ?.let { if (it.endsWith("/")) it else "$it/" }
++            ?: throw IOException("unable to get image domain")
++    }
++
++    private fun imageUrl(path: String): String {
++        val cleanPath = path.trim()
++        return when {
++            cleanPath.startsWith("http://") || cleanPath.startsWith("https://") -> cleanPath
++            cleanPath.startsWith("//") -> "https:$cleanPath"
++            else -> cdnUrl + cleanPath.removePrefix("/")
++        }
++    }
++
+     private val db by lazy {
+         val doc = client.newCall(GET(baseUrl, headers)).execute().asJsoup()
+         val posterJs = POSTER_JS_REGEX.find(doc.html())?.groupValues?.get(1) ?: "2026"
+@@ -108,7 +124,7 @@ abstract class BlackToon :
+ 
+     private fun List<SeriesItem>.getPageChunk(page: Int): MangasPage = MangasPage(
+         mangas = subList((page - 1) * 24, min(page * 24, size))
+-            .map { it.toSManga(cdnUrl) },
++            .map { it.toSManga(::imageUrl) },
+         hasNextPage = (page + 1) * 24 <= size,
+     )
+ 
+@@ -161,9 +177,7 @@ abstract class BlackToon :
+         val doc = response.asJsoup()
+         return SManga.create().apply {
+             description = doc.select("p.mt-2").last()?.text()
+-            thumbnail_url = doc.selectFirst("script:containsData(+img_domain+)")?.data()?.let {
+-                cdnUrl + it.substringAfter("+'").substringBefore("'+")
+-            }
++            thumbnail_url = doc.selectFirst(".thumb2")?.attr("o_src")?.let(::imageUrl)
+             status = response.request.url.fragment!!.toInt()
+         }
+     }
+@@ -204,7 +218,7 @@ abstract class BlackToon :
+         val document = response.asJsoup()
+ 
+         return document.select("#toon_content_imgs img").map {
+-            Page(0, imageUrl = cdnUrl + it.attr("o_src"))
++            Page(0, imageUrl = imageUrl(it.attr("o_src")))
+         }
+     }
+ 
+@@ -248,6 +262,7 @@ abstract class BlackToon :
+         private const val USER_AGENT = "okhttp/4.12.0"
+         private val DOMAIN_NUMBER_REGEX = Regex("""\d+""")
+         private val POSTER_JS_REGEX = Regex("""var\s+poster_js\s*=\s*["']([^"']+)["']""")
++        private val IMG_DOMAIN_REGEX = Regex("""var\s+img_domain\s*=\s*["']([^"']+)["']""")
+         private val WEBTOON_SCRIPT_REGEX = Regex("""/data/webtoon/webtoon_(\d+)_(\d+)\.js""")
+     }
+ }
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt
+index 15d03c0a79..b2d9d10e25 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt
+@@ -39,11 +39,11 @@ class SeriesItem(
+ 
+     var listIndex = -1
+ 
+-    fun toSManga(cdnUrl: String) = SManga.create().apply {
++    fun toSManga(imageUrl: (String) -> String) = SManga.create().apply {
+         url = id
+         title = name
+         thumbnail_url = poster.takeIf { it.isNotBlank() }?.let {
+-            cdnUrl + it.replace("_x4", "").replace("_x3", "")
++            imageUrl(it.replace("_x4", "").replace("_x3", ""))
+         }
+         genre = buildList {
+             add(platformsMap[platform])
