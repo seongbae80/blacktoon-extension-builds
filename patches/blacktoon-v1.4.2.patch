@@ -1,0 +1,96 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index feed468452..736584c888 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,13 +4,13 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 1
++    versionCode = 2
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+     source {
+         name = "블랙툰"
+         lang = "ko"
+-        baseUrl = "https://blacktoon.me"
++        baseUrl = "https://blacktoon415.com"
+     }
+ }
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index baf3802b22..8f527dc5be 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -23,19 +23,14 @@ import kotlin.random.Random
+ @Source
+ abstract class BlackToon : HttpSource() {
+ 
+-    private var currentBaseUrlHost = ""
++    private var currentBaseUrlHost: String? = null
+ 
+     private val cdnUrl = "https://blacktoonimg.com/"
+ 
+     override val supportsLatest = true
+ 
+     override val client = network.client.newBuilder().addInterceptor { chain ->
+-        if (currentBaseUrlHost.isBlank()) {
+-            noRedirectClient.newCall(GET(baseUrl, headers)).execute().use {
+-                currentBaseUrlHost = it.headers["location"]?.toHttpUrlOrNull()?.host
+-                    ?: throw IOException("unable to get updated url")
+-            }
+-        }
++        val currentBaseUrlHost = getCurrentBaseUrlHost()
+ 
+         val request = chain.request().newBuilder().apply {
+             if (chain.request().url.toString().startsWith(baseUrl)) {
+@@ -58,6 +53,19 @@ abstract class BlackToon : HttpSource() {
+ 
+     private val json by injectLazy<Json>()
+ 
++    private fun getCurrentBaseUrlHost(): String {
++        currentBaseUrlHost?.let { return it }
++
++        val host = noRedirectClient.newCall(GET(baseUrl, headers)).execute().use {
++            it.headers["location"]?.toHttpUrlOrNull()?.host
++                ?: baseUrl.toHttpUrlOrNull()?.host
++                ?: throw IOException("unable to get updated url")
++        }
++
++        currentBaseUrlHost = host
++        return host
++    }
++
+     private val db by lazy {
+         val doc = client.newCall(GET(baseUrl, headers)).execute().asJsoup()
+         doc.select("script[src*=data/webtoon]").flatMap { scriptEl ->
+@@ -115,11 +123,12 @@ abstract class BlackToon : HttpSource() {
+     override fun mangaDetailsRequest(manga: SManga): Request = GET("$baseUrl/webtoon/${manga.url}.html#${manga.status}", headers)
+ 
+     override fun getMangaUrl(manga: SManga): String = buildString {
+-        if (currentBaseUrlHost.isBlank()) {
++        val host = currentBaseUrlHost
++        if (host.isNullOrBlank()) {
+             append(baseUrl)
+         } else {
+             append("https://")
+-            append(currentBaseUrlHost)
++            append(host)
+         }
+         append("/webtoon/")
+         append(manga.url)
+@@ -155,11 +164,12 @@ abstract class BlackToon : HttpSource() {
+     }
+ 
+     override fun getChapterUrl(chapter: SChapter): String = buildString {
+-        if (currentBaseUrlHost.isBlank()) {
++        val host = currentBaseUrlHost
++        if (host.isNullOrBlank()) {
+             append(baseUrl)
+         } else {
+             append("https://")
+-            append(currentBaseUrlHost)
++            append(host)
+         }
+         append("/webtoons/")
+         append(chapter.url)
