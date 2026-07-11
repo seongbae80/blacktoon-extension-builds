@@ -1,0 +1,154 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index 56355a5586..3e3a3a6f7e 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 4
++    versionCode = 5
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index 0baf35342f..cc16478533 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -32,8 +32,8 @@ abstract class BlackToon :
+     ConfigurableSource {
+ 
+     private var currentBaseUrlHost: String? = null
+-
+-    private val cdnUrl by lazy { getImageBaseUrl() }
++    private var cachedImageBaseUrl: Pair<String, String>? = null
++    private var cachedDb: Pair<String, List<SeriesItem>>? = null
+ 
+     private val preferences: SharedPreferences = getPreferences()
+ 
+@@ -80,9 +80,13 @@ abstract class BlackToon :
+     }
+ 
+     private fun getImageBaseUrl(): String {
++        val cacheKey = baseUrl
++        cachedImageBaseUrl?.takeIf { it.first == cacheKey }?.let { return it.second }
++
+         val config = client.newCall(GET("$baseUrl/data/config.js", headers)).execute().body.string()
+         return IMG_DOMAIN_REGEX.find(config)?.groupValues?.get(1)
+             ?.let { if (it.endsWith("/")) it else "$it/" }
++            ?.also { cachedImageBaseUrl = cacheKey to it }
+             ?: throw IOException("unable to get image domain")
+     }
+ 
+@@ -91,11 +95,14 @@ abstract class BlackToon :
+         return when {
+             cleanPath.startsWith("http://") || cleanPath.startsWith("https://") -> cleanPath
+             cleanPath.startsWith("//") -> "https:$cleanPath"
+-            else -> cdnUrl + cleanPath.removePrefix("/")
++            else -> getImageBaseUrl() + cleanPath.removePrefix("/")
+         }
+     }
+ 
+-    private val db by lazy {
++    private fun getDb(): List<SeriesItem> {
++        val cacheKey = baseUrl
++        cachedDb?.takeIf { it.first == cacheKey }?.let { return it.second }
++
+         val doc = client.newCall(GET(baseUrl, headers)).execute().asJsoup()
+         val posterJs = POSTER_JS_REGEX.find(doc.html())?.groupValues?.get(1) ?: "2026"
+ 
+@@ -108,7 +115,7 @@ abstract class BlackToon :
+                 }
+                 .toList()
+ 
+-        scriptUrls.distinct().flatMap { scriptUrl ->
++        return scriptUrls.distinct().flatMap { scriptUrl ->
+             val body = client.newCall(GET(scriptUrl, headers)).execute().body.string()
+             val listIdx = body.substringBefore(" = ")
+                 .substringAfter("data")
+@@ -119,7 +126,7 @@ abstract class BlackToon :
+                 .removeSuffix(";")
+                 .let { json.decodeFromString<List<SeriesItem>>(it) }
+                 .onEach { it.listIndex = listIdx }
+-        }
++        }.also { cachedDb = cacheKey to it }
+     }
+ 
+     private fun List<SeriesItem>.getPageChunk(page: Int): MangasPage = MangasPage(
+@@ -129,15 +136,15 @@ abstract class BlackToon :
+     )
+ 
+     override fun fetchPopularManga(page: Int): Observable<MangasPage> = Observable.just(
+-        db.sortedByDescending { it.hot }.getPageChunk(page),
++        getDb().sortedByDescending { it.hot }.getPageChunk(page),
+     )
+ 
+     override fun fetchLatestUpdates(page: Int): Observable<MangasPage> = Observable.just(
+-        db.sortedByDescending { it.updatedAt }.getPageChunk(page),
++        getDb().sortedByDescending { it.updatedAt }.getPageChunk(page),
+     )
+ 
+     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
+-        var list = db
++        var list = getDb()
+ 
+         if (query.isNotBlank()) {
+             val stdQuery = query.trim()
+@@ -225,28 +232,42 @@ abstract class BlackToon :
+     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+         EditTextPreference(screen.context).apply {
+             key = DOMAIN_NUMBER_PREF
+-            title = "BlackToon domain number"
++            title = "BlackToon domain"
+             summary = "Current domain: blacktoon${getDomainNumber()}.com"
+-            dialogTitle = "BlackToon domain number"
++            dialogTitle = "BlackToon domain"
+             setDefaultValue(DEFAULT_DOMAIN_NUMBER)
+             setOnPreferenceChangeListener { _, newValue ->
+-                val number = (newValue as String).trim()
+-                if (number.matches(DOMAIN_NUMBER_REGEX)) {
+-                    currentBaseUrlHost = null
++                val number = getDomainNumber(newValue as String)
++                if (number != null) {
++                    clearDomainCaches()
+                     Toast.makeText(screen.context, "Domain changed to blacktoon$number.com", Toast.LENGTH_SHORT).show()
+                     true
+                 } else {
+-                    Toast.makeText(screen.context, "Enter numbers only, e.g. 415, 416, 417", Toast.LENGTH_LONG).show()
++                    Toast.makeText(screen.context, "Enter a number or domain, e.g. 415 or blacktoon416.com", Toast.LENGTH_LONG).show()
+                     false
+                 }
+             }
+         }.let(screen::addPreference)
+     }
+ 
++    private fun clearDomainCaches() {
++        currentBaseUrlHost = null
++        cachedImageBaseUrl = null
++        cachedDb = null
++    }
++
+     private fun getDomainNumber(): String = preferences.getString(DOMAIN_NUMBER_PREF, DEFAULT_DOMAIN_NUMBER)
+-        ?.takeIf { it.matches(DOMAIN_NUMBER_REGEX) }
++        ?.let(::getDomainNumber)
+         ?: DEFAULT_DOMAIN_NUMBER
+ 
++    private fun getDomainNumber(value: String): String? {
++        val trimmed = value.trim().trimEnd('/')
++        return when {
++            trimmed.matches(DOMAIN_NUMBER_REGEX) -> trimmed
++            else -> DOMAIN_REGEX.matchEntire(trimmed)?.groupValues?.get(1)
++        }
++    }
++
+     // unused
+     override fun popularMangaRequest(page: Int): Request = throw UnsupportedOperationException()
+     override fun popularMangaParse(response: Response): MangasPage = throw UnsupportedOperationException()
+@@ -261,6 +282,7 @@ abstract class BlackToon :
+         private const val DOMAIN_NUMBER_PREF = "domain_number"
+         private const val USER_AGENT = "okhttp/4.12.0"
+         private val DOMAIN_NUMBER_REGEX = Regex("""\d+""")
++        private val DOMAIN_REGEX = Regex("""(?:https?://)?blacktoon(\d+)\.com""", RegexOption.IGNORE_CASE)
+         private val POSTER_JS_REGEX = Regex("""var\s+poster_js\s*=\s*["']([^"']+)["']""")
+         private val IMG_DOMAIN_REGEX = Regex("""var\s+img_domain\s*=\s*["']([^"']+)["']""")
+         private val WEBTOON_SCRIPT_REGEX = Regex("""/data/webtoon/webtoon_(\d+)_(\d+)\.js""")
