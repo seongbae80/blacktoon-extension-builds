@@ -1,0 +1,31 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index 48d64c1374..b22f0d875c 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 8
++    versionCode = 9
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index 8b112a1d21..a0a4e47083 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -104,9 +104,10 @@ abstract class BlackToon :
+         chain: okhttp3.Interceptor.Chain,
+         request: Request,
+     ): Response {
+-        val imageBaseUrls = runCatching { getImageBaseUrls() }.getOrElse {
+-            return chain.proceed(request)
+-        }
++        val imageBaseUrls = cachedImageBaseUrls
++            ?.takeIf { it.first == baseUrl }
++            ?.second
++            ?: return chain.proceed(request)
+         val imageHosts = imageBaseUrls.mapNotNull { it.toHttpUrlOrNull()?.host }
+         if (request.url.host !in imageHosts) {
+             return chain.proceed(request)
