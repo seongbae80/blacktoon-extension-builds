@@ -1,0 +1,57 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index 1a87953871..cc43d81d83 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 6
++    versionCode = 7
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index f1b47e74bb..a9b5dfb496 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -91,12 +91,28 @@ abstract class BlackToon :
+         cachedImageBaseUrl?.takeIf { it.first == cacheKey }?.let { return it.second }
+ 
+         val config = client.newCall(GET("$baseUrl/data/config.js", headers)).execute().body.string()
+-        return IMG_DOMAIN_REGEX.find(config)?.groupValues?.get(1)
++        return getImageDomains(config)
++            .maxWithOrNull(compareBy<Pair<String, Int>> { it.second }.thenBy { it.first })
++            ?.first
+             ?.let { if (it.endsWith("/")) it else "$it/" }
+             ?.also { cachedImageBaseUrl = cacheKey to it }
+             ?: throw IOException("unable to get image domain")
+     }
+ 
++    private fun getImageDomains(config: String): List<Pair<String, Int>> {
++        val weights = IMG_PERCENT_REGEX.findAll(config).associate { match ->
++            match.groupValues[1] to match.groupValues[2].toInt()
++        }
++
++        return IMG_DOMAIN_REGEX.findAll(config)
++            .map { match ->
++                val suffix = match.groupValues[1].ifEmpty { "1" }
++                match.groupValues[2] to (weights[suffix] ?: 0)
++            }
++            .distinctBy { it.first }
++            .toList()
++    }
++
+     private fun imageUrl(path: String): String {
+         val cleanPath = path.trim()
+         return when {
+@@ -278,7 +294,8 @@ abstract class BlackToon :
+         private val DOMAIN_NUMBER_REGEX = Regex("""\d+""")
+         private val DOMAIN_REGEX = Regex("""(?:https?://)?blacktoon(\d+)\.com""", RegexOption.IGNORE_CASE)
+         private val POSTER_JS_REGEX = Regex("""var\s+poster_js\s*=\s*["']([^"']+)["']""")
+-        private val IMG_DOMAIN_REGEX = Regex("""var\s+img_domain\s*=\s*["']([^"']+)["']""")
++        private val IMG_DOMAIN_REGEX = Regex("""var\s+img_domain(\d*)\s*=\s*["']([^"']+)["']""")
++        private val IMG_PERCENT_REGEX = Regex("""var\s+img_per(\d+)\s*=\s*["']?(\d+)["']?""")
+         private val WEBTOON_SCRIPT_REGEX = Regex("""/data/webtoon/webtoon_(\d+)_(\d+)\.js""")
+     }
+ }
