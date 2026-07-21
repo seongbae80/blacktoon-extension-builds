@@ -1,0 +1,113 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index cc43d81d83..48d64c1374 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 7
++    versionCode = 8
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index a9b5dfb496..8b112a1d21 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -32,7 +32,7 @@ abstract class BlackToon :
+     ConfigurableSource {
+ 
+     private var currentBaseUrlHost: Pair<String, String>? = null
+-    private var cachedImageBaseUrl: Pair<String, String>? = null
++    private var cachedImageBaseUrls: Pair<String, List<String>>? = null
+     private var cachedDb: Pair<String, List<SeriesItem>>? = null
+ 
+     private val preferences: SharedPreferences = getPreferences(SOURCE_ID)
+@@ -63,7 +63,7 @@ abstract class BlackToon :
+             header("User-Agent", USER_AGENT)
+         }.build()
+ 
+-        return@addInterceptor chain.proceed(request)
++        return@addInterceptor proceedWithImageFallback(chain, request)
+     }.build()
+ 
+     private val noRedirectClient = network.client.newBuilder()
+@@ -86,17 +86,61 @@ abstract class BlackToon :
+         return host
+     }
+ 
+-    private fun getImageBaseUrl(): String {
++    private fun getImageBaseUrl(): String = getImageBaseUrls().first()
++
++    private fun getImageBaseUrls(): List<String> {
+         val cacheKey = baseUrl
+-        cachedImageBaseUrl?.takeIf { it.first == cacheKey }?.let { return it.second }
++        cachedImageBaseUrls?.takeIf { it.first == cacheKey }?.let { return it.second }
+ 
+         val config = client.newCall(GET("$baseUrl/data/config.js", headers)).execute().body.string()
+         return getImageDomains(config)
+-            .maxWithOrNull(compareBy<Pair<String, Int>> { it.second }.thenBy { it.first })
+-            ?.first
+-            ?.let { if (it.endsWith("/")) it else "$it/" }
+-            ?.also { cachedImageBaseUrl = cacheKey to it }
+-            ?: throw IOException("unable to get image domain")
++            .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
++            .map { it.first.let { url -> if (url.endsWith("/")) url else "$url/" } }
++            .ifEmpty { throw IOException("unable to get image domain") }
++            .also { cachedImageBaseUrls = cacheKey to it }
++    }
++
++    private fun proceedWithImageFallback(
++        chain: okhttp3.Interceptor.Chain,
++        request: Request,
++    ): Response {
++        val imageBaseUrls = runCatching { getImageBaseUrls() }.getOrElse {
++            return chain.proceed(request)
++        }
++        val imageHosts = imageBaseUrls.mapNotNull { it.toHttpUrlOrNull()?.host }
++        if (request.url.host !in imageHosts) {
++            return chain.proceed(request)
++        }
++
++        val path = request.url.encodedPath.removePrefix("/")
++        val candidates = imageBaseUrls
++            .mapNotNull { base ->
++                base.toHttpUrlOrNull()?.newBuilder()
++                    ?.addEncodedPathSegments(path)
++                    ?.encodedQuery(request.url.encodedQuery)
++                    ?.build()
++            }
++            .distinct()
++            .sortedBy { if (it.host == request.url.host) 0 else 1 }
++
++        var lastException: IOException? = null
++        for (url in candidates) {
++            val candidateRequest = request.newBuilder().url(url).build()
++            val response = try {
++                chain.proceed(candidateRequest)
++            } catch (e: IOException) {
++                lastException = e
++                continue
++            }
++
++            if (response.isSuccessful) {
++                return response
++            }
++            response.close()
++        }
++
++        lastException?.let { throw it }
++        return chain.proceed(request)
+     }
+ 
+     private fun getImageDomains(config: String): List<Pair<String, Int>> {
+@@ -253,7 +297,7 @@ abstract class BlackToon :
+                 val number = getDomainNumber(newValue as String)
+                 if (number != null) {
+                     currentBaseUrlHost = null
+-                    cachedImageBaseUrl = null
++                    cachedImageBaseUrls = null
+                     cachedDb = null
+                     Toast.makeText(screen.context, "Domain changed to blacktoon$number.com", Toast.LENGTH_SHORT).show()
+                     true
