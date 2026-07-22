@@ -7,4 +7,4 @@ New repository metadata URL:
 https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/repo.json
 
 Direct APK:
-https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/apk/tachiyomi-ko.blacktoon-v1.4.15-debug.apk
+https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/apk/tachiyomi-ko.blacktoon-v1.4.16-debug.apk

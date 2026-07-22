@@ -1,0 +1,41 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index 954ad11a21..d12b1690ad 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 15
++    versionCode = 16
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index 6f7550ad96..8d2babff22 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -352,7 +352,7 @@ abstract class BlackToon :
+         private const val SOURCE_ID = 7_080_800_841_003_944_426L
+         private const val DEFAULT_DOMAIN_NUMBER = "417"
+         private const val DOMAIN_NUMBER_PREF = "domain_number"
+-        private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
++        private const val USER_AGENT = "okhttp/4.12.0"
+         private val ONGOING_LIST_INDEXES = setOf(1)
+         private val COMPLETED_LIST_INDEXES = setOf(0)
+         private val ALL_LIST_INDEXES = ONGOING_LIST_INDEXES + COMPLETED_LIST_INDEXES
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt
+index 6de0fad643..b2d9d10e25 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt
+@@ -42,7 +42,9 @@ class SeriesItem(
+     fun toSManga(imageUrl: (String) -> String) = SManga.create().apply {
+         url = id
+         title = name
+-        thumbnail_url = poster.takeIf { it.isNotBlank() }?.let(imageUrl)
++        thumbnail_url = poster.takeIf { it.isNotBlank() }?.let {
++            imageUrl(it.replace("_x4", "").replace("_x3", ""))
++        }
+         genre = buildList {
+             add(platformsMap[platform])
+             add(publishDayMap[publishDay])
