@@ -1,0 +1,234 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index 123aa7a0c3..1dcee8885c 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 17
++    versionCode = 18
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index d27a04b643..102ff52c34 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -17,10 +17,8 @@ import keiyoushi.annotation.Source
+ import keiyoushi.utils.getPreferences
+ import kotlinx.serialization.decodeFromString
+ import kotlinx.serialization.json.Json
+-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+ import okhttp3.Request
+ import okhttp3.Response
+-import okio.IOException
+ import rx.Observable
+ import uy.kohesive.injekt.injectLazy
+ import kotlin.random.Random
+@@ -30,8 +28,6 @@ abstract class BlackToon :
+     HttpSource(),
+     ConfigurableSource {
+ 
+-    private var currentBaseUrlHost: Pair<String, String>? = null
+-    private var cachedImageBaseUrls: Pair<String, List<String>>? = null
+     private val cachedDb = mutableMapOf<String, List<SeriesItem>>()
+ 
+     private val preferences: SharedPreferences = getPreferences(SOURCE_ID)
+@@ -46,132 +42,16 @@ abstract class BlackToon :
+ 
+     override val supportsLatest = true
+ 
+-    override val client = network.client.newBuilder()
+-        .addInterceptor { chain ->
+-            val currentBaseUrlHost = getCurrentBaseUrlHost()
+-            var isSiteRequest = false
+-
+-            val request = chain.request().newBuilder().apply {
+-                if (chain.request().url.toString().startsWith(baseUrl)) {
+-                    isSiteRequest = true
+-                    url(
+-                        chain.request().url.newBuilder()
+-                            .host(currentBaseUrlHost)
+-                            .build(),
+-                    )
+-                }
+-                header("Referer", "https://$currentBaseUrlHost/")
+-                if (isSiteRequest) {
+-                    header("Origin", "https://$currentBaseUrlHost")
+-                }
+-                header("User-Agent", USER_AGENT)
+-            }.build()
+-
+-            return@addInterceptor proceedWithImageFallback(chain, request)
+-        }
+-        .build()
+-
+-    private val noRedirectClient = network.client.newBuilder()
+-        .followRedirects(false)
+-        .build()
++    override val client = network.client.newBuilder().build()
+ 
+     private val json by injectLazy<Json>()
+ 
+-    private fun getCurrentBaseUrlHost(): String {
+-        val cacheKey = baseUrl
+-        currentBaseUrlHost?.takeIf { it.first == cacheKey }?.let { return it.second }
+-
+-        val host = noRedirectClient.newCall(GET(baseUrl, headers)).execute().use {
+-            it.headers["location"]?.toHttpUrlOrNull()?.host
+-                ?: baseUrl.toHttpUrlOrNull()?.host
+-                ?: throw IOException("unable to get updated url")
+-        }
+-
+-        currentBaseUrlHost = cacheKey to host
+-        return host
+-    }
+-
+-    private fun getImageBaseUrl(): String = getImageBaseUrls().first()
+-
+-    private fun getImageBaseUrls(): List<String> {
+-        val cacheKey = baseUrl
+-        cachedImageBaseUrls?.takeIf { it.first == cacheKey }?.let { return it.second }
+-
+-        val config = client.newCall(GET("$baseUrl/data/config.js", headers)).execute().body.string()
+-        val imageDomains = getImageDomains(config).ifEmpty { throw IOException("unable to get image domain") }
+-        val maxWeight = imageDomains.maxOf { it.second }
+-
+-        return imageDomains
+-            .filter { maxWeight <= 0 || it.second == maxWeight }
+-            .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
+-            .map { it.first.let { url -> if (url.endsWith("/")) url else "$url/" } }
+-            .also { cachedImageBaseUrls = cacheKey to it }
+-    }
+-
+-    private fun proceedWithImageFallback(
+-        chain: okhttp3.Interceptor.Chain,
+-        request: Request,
+-    ): Response {
+-        val imageBaseUrls = cachedImageBaseUrls
+-            ?.takeIf { it.first == baseUrl }
+-            ?.second
+-            ?: return chain.proceed(request)
+-        val imageHosts = imageBaseUrls.mapNotNull { it.toHttpUrlOrNull()?.host }
+-        if (request.url.host !in imageHosts) {
+-            return chain.proceed(request)
+-        }
+-
+-        val path = request.url.encodedPath.removePrefix("/")
+-        val candidates = imageBaseUrls
+-            .mapNotNull { base ->
+-                base.toHttpUrlOrNull()?.newBuilder()
+-                    ?.addEncodedPathSegments(path)
+-                    ?.encodedQuery(request.url.encodedQuery)
+-                    ?.build()
+-            }
+-            .distinct()
+-            .sortedBy { if (it.host == request.url.host) 0 else 1 }
+-
+-        var lastException: IOException? = null
+-        for (url in candidates) {
+-            val candidateRequest = request.newBuilder().url(url).build()
+-            val response = try {
+-                chain.proceed(candidateRequest)
+-            } catch (e: IOException) {
+-                lastException = e
+-                continue
+-            }
+-
+-            if (response.isSuccessful) {
+-                return response
+-            }
+-            response.close()
+-        }
+-
+-        lastException?.let { throw it }
+-        return chain.proceed(request)
+-    }
+-
+-    private fun getImageDomains(config: String): List<Pair<String, Int>> {
+-        val weights = IMG_PERCENT_REGEX.findAll(config).associate { match ->
+-            match.groupValues[1] to match.groupValues[2].toInt()
+-        }
+-
+-        return IMG_DOMAIN_REGEX.findAll(config)
+-            .map { match ->
+-                val suffix = match.groupValues[1].ifEmpty { "1" }
+-                match.groupValues[2] to (weights[suffix] ?: 0)
+-            }
+-            .distinctBy { it.first }
+-            .toList()
+-    }
+-
+     private fun imageUrl(path: String): String {
+         val cleanPath = path.trim()
+         return when {
+             cleanPath.startsWith("http://") || cleanPath.startsWith("https://") -> cleanPath
+             cleanPath.startsWith("//") -> "https:$cleanPath"
+-            else -> getImageBaseUrl() + cleanPath.removePrefix("/")
++            else -> DEFAULT_IMAGE_BASE_URL + cleanPath.removePrefix("/")
+         }
+     }
+ 
+@@ -256,7 +136,7 @@ abstract class BlackToon :
+     override fun mangaDetailsRequest(manga: SManga): Request = GET("$baseUrl/webtoon/${manga.url}.html#${manga.status}", headers)
+ 
+     override fun getMangaUrl(manga: SManga): String = buildString {
+-        append(getCurrentWebUrl())
++        append(baseUrl)
+         append("/webtoon/")
+         append(manga.url)
+         append(".html")
+@@ -289,7 +169,7 @@ abstract class BlackToon :
+     }
+ 
+     override fun getChapterUrl(chapter: SChapter): String = buildString {
+-        append(getCurrentWebUrl())
++        append(baseUrl)
+         append("/webtoons/")
+         append(chapter.url)
+         append(".html")
+@@ -297,8 +177,6 @@ abstract class BlackToon :
+ 
+     override fun pageListRequest(chapter: SChapter): Request = GET("$baseUrl/webtoons/${chapter.url}.html", headers)
+ 
+-    private fun getCurrentWebUrl(): String = "https://${getCurrentBaseUrlHost()}"
+-
+     override fun pageListParse(response: Response): List<Page> {
+         val document = response.asJsoup()
+ 
+@@ -317,8 +195,6 @@ abstract class BlackToon :
+             setOnPreferenceChangeListener { _, newValue ->
+                 val number = getDomainNumber(newValue as String)
+                 if (number != null) {
+-                    currentBaseUrlHost = null
+-                    cachedImageBaseUrls = null
+                     cachedDb.clear()
+                     Toast.makeText(screen.context, "Domain changed to blacktoon$number.com", Toast.LENGTH_SHORT).show()
+                     true
+@@ -351,19 +227,22 @@ abstract class BlackToon :
+     override fun searchMangaParse(response: Response): MangasPage = throw UnsupportedOperationException()
+     override fun imageUrlParse(response: Response): String = throw UnsupportedOperationException()
+ 
++    override fun headersBuilder() = super.headersBuilder()
++        .set("User-Agent", USER_AGENT)
++        .set("Referer", "$baseUrl/")
++
+     companion object {
+         private const val SOURCE_ID = 7_080_800_841_003_944_426L
+         private const val DEFAULT_DOMAIN_NUMBER = "417"
++        private const val DEFAULT_IMAGE_BASE_URL = "https://3c99fa.speedwebgo.com/"
+         private const val DOMAIN_NUMBER_PREF = "domain_number"
+-        private const val USER_AGENT = "okhttp/4.12.0"
++        private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+         private val ONGOING_LIST_INDEXES = setOf(1)
+         private val COMPLETED_LIST_INDEXES = setOf(0)
+         private val ALL_LIST_INDEXES = ONGOING_LIST_INDEXES + COMPLETED_LIST_INDEXES
+         private val DOMAIN_NUMBER_REGEX = Regex("""\d+""")
+         private val DOMAIN_REGEX = Regex("""(?:https?://)?blacktoon(\d+)\.com""", RegexOption.IGNORE_CASE)
+         private val POSTER_JS_REGEX = Regex("""var\s+poster_js\s*=\s*["']([^"']+)["']""")
+-        private val IMG_DOMAIN_REGEX = Regex("""var\s+img_domain(\d*)\s*=\s*["']([^"']+)["']""")
+-        private val IMG_PERCENT_REGEX = Regex("""var\s+img_per(\d+)\s*=\s*["']?(\d+)["']?""")
+         private val WEBTOON_SCRIPT_REGEX = Regex("""/data/webtoon/webtoon_(\d+)_(\d+)\.js""")
+     }
+ }
