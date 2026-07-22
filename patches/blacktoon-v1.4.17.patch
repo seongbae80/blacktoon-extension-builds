@@ -1,0 +1,33 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index d12b1690ad..123aa7a0c3 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 16
++    versionCode = 17
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index 8d2babff22..d27a04b643 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -98,10 +98,13 @@ abstract class BlackToon :
+         cachedImageBaseUrls?.takeIf { it.first == cacheKey }?.let { return it.second }
+ 
+         val config = client.newCall(GET("$baseUrl/data/config.js", headers)).execute().body.string()
+-        return getImageDomains(config)
++        val imageDomains = getImageDomains(config).ifEmpty { throw IOException("unable to get image domain") }
++        val maxWeight = imageDomains.maxOf { it.second }
++
++        return imageDomains
++            .filter { maxWeight <= 0 || it.second == maxWeight }
+             .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
+             .map { it.first.let { url -> if (url.endsWith("/")) url else "$url/" } }
+-            .ifEmpty { throw IOException("unable to get image domain") }
+             .also { cachedImageBaseUrls = cacheKey to it }
+     }
+ 
