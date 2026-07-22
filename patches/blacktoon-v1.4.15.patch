@@ -1,0 +1,28 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index c2b8541f09..954ad11a21 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 14
++    versionCode = 15
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt
+index b2d9d10e25..6de0fad643 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/Dto.kt
+@@ -42,9 +42,7 @@ class SeriesItem(
+     fun toSManga(imageUrl: (String) -> String) = SManga.create().apply {
+         url = id
+         title = name
+-        thumbnail_url = poster.takeIf { it.isNotBlank() }?.let {
+-            imageUrl(it.replace("_x4", "").replace("_x3", ""))
+-        }
++        thumbnail_url = poster.takeIf { it.isNotBlank() }?.let(imageUrl)
+         genre = buildList {
+             add(platformsMap[platform])
+             add(publishDayMap[publishDay])
