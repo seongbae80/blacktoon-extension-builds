@@ -1,0 +1,135 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index 6daeec3928..c2b8541f09 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 13
++    versionCode = 14
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index b75a662f52..6f7550ad96 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -23,7 +23,6 @@ import okhttp3.Response
+ import okio.IOException
+ import rx.Observable
+ import uy.kohesive.injekt.injectLazy
+-import kotlin.math.min
+ import kotlin.random.Random
+ 
+ @Source
+@@ -33,7 +32,7 @@ abstract class BlackToon :
+ 
+     private var currentBaseUrlHost: Pair<String, String>? = null
+     private var cachedImageBaseUrls: Pair<String, List<String>>? = null
+-    private var cachedDb: Pair<String, List<SeriesItem>>? = null
++    private val cachedDb = mutableMapOf<String, List<SeriesItem>>()
+ 
+     private val preferences: SharedPreferences = getPreferences(SOURCE_ID)
+ 
+@@ -173,40 +172,45 @@ abstract class BlackToon :
+         }
+     }
+ 
+-    private fun getDb(): List<SeriesItem> {
+-        val cacheKey = baseUrl
+-        cachedDb?.takeIf { it.first == cacheKey }?.let { return it.second }
++    private fun getDb(listIndexes: Set<Int> = ONGOING_LIST_INDEXES): List<SeriesItem> {
++        val cacheKey = "$baseUrl:${listIndexes.sorted().joinToString(",")}"
++        cachedDb[cacheKey]?.let { return it }
+ 
+         val doc = client.newCall(GET(baseUrl, headers)).execute().asJsoup()
+         val posterJs = POSTER_JS_REGEX.find(doc.html())?.groupValues?.get(1) ?: "2026"
+ 
+-        val scriptUrls = doc.select("script[src*=data/webtoon]").map { it.absUrl("src") } +
++        val scriptUrls = doc.select("script[src*=data/webtoon]").mapNotNull { element ->
++            val url = element.absUrl("src")
++            WEBTOON_SCRIPT_REGEX.find(url)?.let { it.groupValues[1].toInt() to url }
++        } +
+             WEBTOON_SCRIPT_REGEX.findAll(doc.html())
+                 .map { match ->
+-                    val listIdx = match.groupValues[1]
++                    val listIdx = match.groupValues[1].toInt()
+                     val cacheKey = match.groupValues[2]
+-                    "$baseUrl/data/webtoon/webtoon_${listIdx}_$cacheKey.js?$posterJs"
++                    listIdx to "$baseUrl/data/webtoon/webtoon_${listIdx}_$cacheKey.js?$posterJs"
+                 }
+                 .toList()
+ 
+-        return scriptUrls.distinct().flatMap { scriptUrl ->
+-            val body = client.newCall(GET(scriptUrl, headers)).execute().body.string()
+-            val listIdx = body.substringBefore(" = ")
+-                .substringAfter("data")
+-                .filter(Char::isDigit)
+-                .toInt()
+-
+-            body.substringAfter(" = ")
+-                .removeSuffix(";")
+-                .let { json.decodeFromString<List<SeriesItem>>(it) }
+-                .onEach { it.listIndex = listIdx }
+-        }.also { cachedDb = cacheKey to it }
++        return scriptUrls.distinctBy { it.second }
++            .filter { it.first in listIndexes }
++            .flatMap { (_, scriptUrl) ->
++                val body = client.newCall(GET(scriptUrl, headers)).execute().body.string()
++                val listIdx = body.substringBefore(" = ")
++                    .substringAfter("data")
++                    .filter(Char::isDigit)
++                    .toInt()
++
++                body.substringAfter(" = ")
++                    .removeSuffix(";")
++                    .let { json.decodeFromString<List<SeriesItem>>(it) }
++                    .onEach { it.listIndex = listIdx }
++            }.also { cachedDb[cacheKey] = it }
+     }
+ 
+     private fun List<SeriesItem>.getPageChunk(page: Int): MangasPage = MangasPage(
+-        mangas = subList((page - 1) * 24, min(page * 24, size))
++        mangas = drop((page - 1) * 24).take(24)
+             .map { it.toSManga(::imageUrl) },
+-        hasNextPage = (page + 1) * 24 <= size,
++        hasNextPage = page * 24 < size,
+     )
+ 
+     override fun fetchPopularManga(page: Int): Observable<MangasPage> = Observable.just(
+@@ -218,7 +222,14 @@ abstract class BlackToon :
+     )
+ 
+     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
+-        var list = getDb()
++        val status = filters.filterIsInstance<Status>().firstOrNull()?.selected
++        var list = getDb(
++            when {
++                query.isNotBlank() -> ALL_LIST_INDEXES
++                status == 0 -> COMPLETED_LIST_INDEXES
++                else -> ONGOING_LIST_INDEXES
++            },
++        )
+ 
+         if (query.isNotBlank()) {
+             val stdQuery = query.trim()
+@@ -305,7 +316,7 @@ abstract class BlackToon :
+                 if (number != null) {
+                     currentBaseUrlHost = null
+                     cachedImageBaseUrls = null
+-                    cachedDb = null
++                    cachedDb.clear()
+                     Toast.makeText(screen.context, "Domain changed to blacktoon$number.com", Toast.LENGTH_SHORT).show()
+                     true
+                 } else {
+@@ -342,6 +353,9 @@ abstract class BlackToon :
+         private const val DEFAULT_DOMAIN_NUMBER = "417"
+         private const val DOMAIN_NUMBER_PREF = "domain_number"
+         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
++        private val ONGOING_LIST_INDEXES = setOf(1)
++        private val COMPLETED_LIST_INDEXES = setOf(0)
++        private val ALL_LIST_INDEXES = ONGOING_LIST_INDEXES + COMPLETED_LIST_INDEXES
+         private val DOMAIN_NUMBER_REGEX = Regex("""\d+""")
+         private val DOMAIN_REGEX = Regex("""(?:https?://)?blacktoon(\d+)\.com""", RegexOption.IGNORE_CASE)
+         private val POSTER_JS_REGEX = Regex("""var\s+poster_js\s*=\s*["']([^"']+)["']""")
