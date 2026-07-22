@@ -1,0 +1,44 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index 76acc9e5e0..3d1f1419a4 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 11
++    versionCode = 12
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index 9ce026476c..398f0b25c0 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -18,7 +18,6 @@ import keiyoushi.utils.getPreferences
+ import kotlinx.serialization.decodeFromString
+ import kotlinx.serialization.json.Json
+ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+-import okhttp3.Protocol
+ import okhttp3.Request
+ import okhttp3.Response
+ import okio.IOException
+@@ -48,8 +47,7 @@ abstract class BlackToon :
+ 
+     override val supportsLatest = true
+ 
+-    override val client = network.client.newBuilder()
+-        .protocols(listOf(Protocol.HTTP_1_1))
++    override val client = network.cloudflareClient.newBuilder()
+         .addInterceptor { chain ->
+             val currentBaseUrlHost = getCurrentBaseUrlHost()
+             var isSiteRequest = false
+@@ -343,7 +341,7 @@ abstract class BlackToon :
+         private const val SOURCE_ID = 7_080_800_841_003_944_426L
+         private const val DEFAULT_DOMAIN_NUMBER = "417"
+         private const val DOMAIN_NUMBER_PREF = "domain_number"
+-        private const val USER_AGENT = "okhttp/4.12.0"
++        private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+         private val DOMAIN_NUMBER_REGEX = Regex("""\d+""")
+         private val DOMAIN_REGEX = Regex("""(?:https?://)?blacktoon(\d+)\.com""", RegexOption.IGNORE_CASE)
+         private val POSTER_JS_REGEX = Regex("""var\s+poster_js\s*=\s*["']([^"']+)["']""")
