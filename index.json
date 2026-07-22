@@ -11,12 +11,12 @@
         "name": "BlackToon",
         "packageName": "eu.kanade.tachiyomi.extension.ko.blacktoon",
         "resources": {
-          "apkUrl": "https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/apk/tachiyomi-ko.blacktoon-v1.4.12-debug.apk",
+          "apkUrl": "https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/apk/tachiyomi-ko.blacktoon-v1.4.13-debug.apk",
           "iconUrl": "https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/icon/eu.kanade.tachiyomi.extension.ko.blacktoon.png"
         },
         "extensionLib": "1.4",
-        "versionCode": "12",
-        "versionName": "1.4.12",
+        "versionCode": "13",
+        "versionName": "1.4.13",
         "contentWarning": "CONTENT_WARNING_NSFW",
         "sources": [
           {

@@ -1,0 +1,26 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index 3d1f1419a4..6daeec3928 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 12
++    versionCode = 13
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index 398f0b25c0..b75a662f52 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -47,7 +47,7 @@ abstract class BlackToon :
+ 
+     override val supportsLatest = true
+ 
+-    override val client = network.cloudflareClient.newBuilder()
++    override val client = network.client.newBuilder()
+         .addInterceptor { chain ->
+             val currentBaseUrlHost = getCurrentBaseUrlHost()
+             var isSiteRequest = false
