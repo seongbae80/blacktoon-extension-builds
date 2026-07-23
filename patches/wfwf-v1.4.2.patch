@@ -1,0 +1,57 @@
+diff --git a/src/ko/wfwf/build.gradle.kts b/src/ko/wfwf/build.gradle.kts
+index 254805cca8..fe2067de91 100644
+--- a/src/ko/wfwf/build.gradle.kts
++++ b/src/ko/wfwf/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "Wfwf"
+-    versionCode = 1
++    versionCode = 2
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/wfwf/src/eu/kanade/tachiyomi/extension/ko/wfwf/Wfwf.kt b/src/ko/wfwf/src/eu/kanade/tachiyomi/extension/ko/wfwf/Wfwf.kt
+index bca6b462c8..38262c47bb 100644
+--- a/src/ko/wfwf/src/eu/kanade/tachiyomi/extension/ko/wfwf/Wfwf.kt
++++ b/src/ko/wfwf/src/eu/kanade/tachiyomi/extension/ko/wfwf/Wfwf.kt
+@@ -83,29 +83,28 @@ abstract class Wfwf :
+     override fun mangaDetailsParse(response: Response): SManga {
+         val document = response.asJsoup()
+         return SManga.create().apply {
+-            title = document.selectFirst(".work-title, .toon-title, h1, h2")?.text()?.trim()
+-                ?.removeSuffix(" - 늑대닷컴")
++            title = document.selectFirst("h1.w-title")?.text()?.trim()
+                 ?: document.title().substringBefore(" - ")
+-            thumbnail_url = document.selectFirst("img[src][alt]")?.absUrl("src")
+-            genre = document.selectFirst(".work-genre, .t-genre")?.text()?.trim()
+-            description = document.selectFirst(".work-desc, .summary, .desc")?.text()?.trim()
+-            status = if (response.request.url.encodedPath.contains("/end")) SManga.COMPLETED else SManga.UNKNOWN
++            thumbnail_url = document.selectFirst(".thumb-wrap img[src]")?.absUrl("src")
++            genre = document.select(".genre-tags .gtag").joinToString { it.text().removePrefix("#") }
++            description = document.selectFirst(".summary")?.text()?.trim()
++            status = SManga.UNKNOWN
+         }
+     }
+ 
+     override fun chapterListRequest(manga: SManga): Request = GET(baseUrl + manga.url, headers)
+ 
+-    override fun chapterListParse(response: Response): List<SChapter> = response.asJsoup().select("a[href*=/view?toon=][href*=num=]")
++    override fun chapterListParse(response: Response): List<SChapter> = response.asJsoup().select("a.ep-item[href*=/view?toon=][href*=num=]")
+         .distinctBy { it.attr("href") }
++        .sortedByDescending { it.attr("data-num").toIntOrNull() ?: 0 }
+         .map { element ->
+             SChapter.create().apply {
+                 url = element.attr("href")
+-                val text = element.text().replace(Regex("""^\\s*(UP|\\d+)\\s+"""), "").trim()
+-                name = text.substringBeforeLast(" ").takeIf { DATE_REGEX.containsMatchIn(text) } ?: text
+-                date_upload = DATE_REGEX.find(text)?.value?.let(::parseDate) ?: 0L
++                name = element.selectFirst(".ep-title")?.text()?.trim()
++                    ?: element.text().replace(Regex("""^\\s*(UP|\\d+)\\s+"""), "").trim()
++                date_upload = element.selectFirst(".ep-date")?.text()?.trim()?.let(::parseDate) ?: 0L
+             }
+         }
+-        .reversed()
+ 
+     override fun pageListRequest(chapter: SChapter): Request = GET(baseUrl + chapter.url, headers)
+ 

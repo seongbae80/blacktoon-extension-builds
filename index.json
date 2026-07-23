@@ -31,12 +31,12 @@
         "name": "Wfwf",
         "packageName": "eu.kanade.tachiyomi.extension.ko.wfwf",
         "resources": {
-          "apkUrl": "https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/apk/tachiyomi-ko.wfwf-v1.4.1-debug.apk",
+          "apkUrl": "https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/apk/tachiyomi-ko.wfwf-v1.4.2-debug.apk",
           "iconUrl": "https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/icon/eu.kanade.tachiyomi.extension.ko.wfwf.png"
         },
         "extensionLib": "1.4",
-        "versionCode": "1",
-        "versionName": "1.4.1",
+        "versionCode": "2",
+        "versionName": "1.4.2",
         "contentWarning": "CONTENT_WARNING_NSFW",
         "sources": [
           {
