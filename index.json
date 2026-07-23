@@ -1,5 +1,5 @@
 {
-  "name": "Seongbae80 BlackToon Builds",
+  "name": "Seongbae80 Korean Extension Builds",
   "badgeLabel": "SB",
   "signingKey": "b22625ab27d8ada6072bb472b06951ed0f889fcbd5aa293460156158acd25bba",
   "contact": {
@@ -24,6 +24,26 @@
             "name": "블랙툰",
             "language": "ko",
             "homeUrl": "https://blacktoon417.com"
+          }
+        ]
+      },
+      {
+        "name": "Wfwf",
+        "packageName": "eu.kanade.tachiyomi.extension.ko.wfwf",
+        "resources": {
+          "apkUrl": "https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/apk/tachiyomi-ko.wfwf-v1.4.1-debug.apk",
+          "iconUrl": "https://raw.githubusercontent.com/seongbae80/blacktoon-extension-builds/repo/icon/eu.kanade.tachiyomi.extension.ko.wfwf.png"
+        },
+        "extensionLib": "1.4",
+        "versionCode": "1",
+        "versionName": "1.4.1",
+        "contentWarning": "CONTENT_WARNING_NSFW",
+        "sources": [
+          {
+            "id": "724022382483619949",
+            "name": "늑대닷컴",
+            "language": "ko",
+            "homeUrl": "https://wfwf425.com"
           }
         ]
       }

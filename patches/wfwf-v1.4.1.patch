@@ -1,0 +1,203 @@
+diff --git a/src/ko/wfwf/build.gradle.kts b/src/ko/wfwf/build.gradle.kts
+new file mode 100644
+index 0000000000..254805cca8
+--- /dev/null
++++ b/src/ko/wfwf/build.gradle.kts
+@@ -0,0 +1,17 @@
++plugins {
++    alias(kei.plugins.extension)
++}
++
++keiyoushi {
++    name = "Wfwf"
++    versionCode = 1
++    contentWarning = ContentWarning.NSFW
++    libVersion = "1.4"
++
++    source {
++        name = "늑대닷컴"
++        lang = "ko"
++        baseUrl = "https://wfwf425.com"
++        skipCodeGen = true
++    }
++}
+diff --git a/src/ko/wfwf/src/eu/kanade/tachiyomi/extension/ko/wfwf/Wfwf.kt b/src/ko/wfwf/src/eu/kanade/tachiyomi/extension/ko/wfwf/Wfwf.kt
+new file mode 100644
+index 0000000000..bca6b462c8
+--- /dev/null
++++ b/src/ko/wfwf/src/eu/kanade/tachiyomi/extension/ko/wfwf/Wfwf.kt
+@@ -0,0 +1,174 @@
++package eu.kanade.tachiyomi.extension.ko.wfwf
++
++import android.content.SharedPreferences
++import android.widget.Toast
++import androidx.preference.EditTextPreference
++import androidx.preference.PreferenceScreen
++import eu.kanade.tachiyomi.network.GET
++import eu.kanade.tachiyomi.source.ConfigurableSource
++import eu.kanade.tachiyomi.source.model.FilterList
++import eu.kanade.tachiyomi.source.model.MangasPage
++import eu.kanade.tachiyomi.source.model.Page
++import eu.kanade.tachiyomi.source.model.SChapter
++import eu.kanade.tachiyomi.source.model.SManga
++import eu.kanade.tachiyomi.source.online.HttpSource
++import eu.kanade.tachiyomi.util.asJsoup
++import keiyoushi.annotation.Source
++import keiyoushi.utils.getPreferences
++import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
++import okhttp3.Request
++import okhttp3.Response
++import org.jsoup.nodes.Document
++import org.jsoup.nodes.Element
++import java.net.URLEncoder
++import java.text.ParseException
++import java.text.SimpleDateFormat
++import java.util.Locale
++
++@Source
++abstract class Wfwf :
++    HttpSource(),
++    ConfigurableSource {
++
++    private val preferences: SharedPreferences = getPreferences(SOURCE_ID)
++
++    override val name = "늑대닷컴"
++    override val lang = "ko"
++    override val id = SOURCE_ID
++    override val baseUrl get() = "https://wfwf${getDomainNumber()}.com"
++    override val supportsLatest = true
++    override val client = network.client.newBuilder().build()
++
++    override fun headersBuilder() = super.headersBuilder()
++        .set("User-Agent", USER_AGENT)
++        .set("Referer", "$baseUrl/")
++
++    override fun popularMangaRequest(page: Int): Request = GET("$baseUrl/ing?t1=&t2=&t3=&o=f&pg=$page", headers)
++
++    override fun popularMangaParse(response: Response): MangasPage = mangaPageParse(response.asJsoup())
++
++    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/ing?t1=&t2=&t3=&o=n&pg=$page", headers)
++
++    override fun latestUpdatesParse(response: Response): MangasPage = mangaPageParse(response.asJsoup())
++
++    override fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request {
++        val encodedQuery = encodeEucKr(query.trim())
++        return GET("$baseUrl/sh?t2=&t3=&o=n&pg=$page&q=$encodedQuery", headers)
++    }
++
++    override fun searchMangaParse(response: Response): MangasPage = mangaPageParse(response.asJsoup())
++
++    private fun mangaPageParse(document: Document): MangasPage {
++        val mangas = document.select("a.t-card[href*=/list?toon=]").map { it.toSManga() }
++        val hasNextPage = document.selectFirst("a[href][class!=on]:matchesOwn(>)")?.attr("href")
++            ?.contains("pg=") == true || document.select("a[href*=&pg=]").any { it.text() == ">" }
++
++        return MangasPage(mangas, hasNextPage)
++    }
++
++    private fun Element.toSManga(): SManga = SManga.create().apply {
++        val href = attr("href")
++        url = href.toHttpUrlOrNull()?.encodedPath?.let { path ->
++            val query = href.toHttpUrlOrNull()?.encodedQuery
++            if (query != null) "$path?$query" else path
++        } ?: href
++        title = selectFirst(".t-title")?.text()?.trim().orEmpty()
++            .ifBlank { selectFirst("img[alt]")?.attr("alt").orEmpty() }
++        thumbnail_url = selectFirst("img[src]")?.absUrl("src")
++        genre = selectFirst(".t-genre")?.text()?.trim()
++    }
++
++    override fun mangaDetailsRequest(manga: SManga): Request = GET(baseUrl + manga.url, headers)
++
++    override fun mangaDetailsParse(response: Response): SManga {
++        val document = response.asJsoup()
++        return SManga.create().apply {
++            title = document.selectFirst(".work-title, .toon-title, h1, h2")?.text()?.trim()
++                ?.removeSuffix(" - 늑대닷컴")
++                ?: document.title().substringBefore(" - ")
++            thumbnail_url = document.selectFirst("img[src][alt]")?.absUrl("src")
++            genre = document.selectFirst(".work-genre, .t-genre")?.text()?.trim()
++            description = document.selectFirst(".work-desc, .summary, .desc")?.text()?.trim()
++            status = if (response.request.url.encodedPath.contains("/end")) SManga.COMPLETED else SManga.UNKNOWN
++        }
++    }
++
++    override fun chapterListRequest(manga: SManga): Request = GET(baseUrl + manga.url, headers)
++
++    override fun chapterListParse(response: Response): List<SChapter> = response.asJsoup().select("a[href*=/view?toon=][href*=num=]")
++        .distinctBy { it.attr("href") }
++        .map { element ->
++            SChapter.create().apply {
++                url = element.attr("href")
++                val text = element.text().replace(Regex("""^\\s*(UP|\\d+)\\s+"""), "").trim()
++                name = text.substringBeforeLast(" ").takeIf { DATE_REGEX.containsMatchIn(text) } ?: text
++                date_upload = DATE_REGEX.find(text)?.value?.let(::parseDate) ?: 0L
++            }
++        }
++        .reversed()
++
++    override fun pageListRequest(chapter: SChapter): Request = GET(baseUrl + chapter.url, headers)
++
++    override fun pageListParse(response: Response): List<Page> = response.asJsoup().select("img[data-src]")
++        .mapNotNull { it.absUrl("data-src").takeIf(String::isNotBlank) }
++        .mapIndexed { index, imageUrl -> Page(index, imageUrl = imageUrl) }
++
++    override fun imageUrlParse(response: Response): String = throw UnsupportedOperationException()
++
++    override fun getMangaUrl(manga: SManga): String = baseUrl + manga.url
++
++    override fun getChapterUrl(chapter: SChapter): String = baseUrl + chapter.url
++
++    override fun getFilterList() = FilterList()
++
++    override fun setupPreferenceScreen(screen: PreferenceScreen) {
++        EditTextPreference(screen.context).apply {
++            key = DOMAIN_NUMBER_PREF
++            title = "Wfwf domain"
++            summary = "Current domain: wfwf${getDomainNumber()}.com"
++            dialogTitle = "Wfwf domain"
++            setDefaultValue(DEFAULT_DOMAIN_NUMBER)
++            setOnPreferenceChangeListener { _, newValue ->
++                val number = getDomainNumber(newValue as String)
++                if (number != null) {
++                    Toast.makeText(screen.context, "Domain changed to wfwf$number.com", Toast.LENGTH_SHORT).show()
++                    true
++                } else {
++                    Toast.makeText(screen.context, "Enter a number or domain, e.g. 425 or wfwf425.com", Toast.LENGTH_LONG).show()
++                    false
++                }
++            }
++        }.let(screen::addPreference)
++    }
++
++    private fun getDomainNumber(): String = preferences.getString(DOMAIN_NUMBER_PREF, DEFAULT_DOMAIN_NUMBER)
++        ?.let(::getDomainNumber)
++        ?: DEFAULT_DOMAIN_NUMBER
++
++    private fun getDomainNumber(value: String): String? {
++        val trimmed = value.trim().trimEnd('/')
++        return when {
++            trimmed.matches(DOMAIN_NUMBER_REGEX) -> trimmed
++            else -> DOMAIN_REGEX.matchEntire(trimmed)?.groupValues?.get(1)
++        }
++    }
++
++    private fun encodeEucKr(value: String): String = URLEncoder.encode(value, "EUC-KR").replace("+", "%20")
++
++    private fun parseDate(value: String): Long = try {
++        dateFormat.parse(value)!!.time
++    } catch (_: ParseException) {
++        0L
++    }
++
++    companion object {
++        private const val SOURCE_ID = 724_022_382_483_619_949L
++        private const val DEFAULT_DOMAIN_NUMBER = "425"
++        private const val DOMAIN_NUMBER_PREF = "domain_number"
++        private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
++        private val DOMAIN_NUMBER_REGEX = Regex("""\d+""")
++        private val DOMAIN_REGEX = Regex("""(?:https?://)?wfwf(\d+)\.com""", RegexOption.IGNORE_CASE)
++        private val DATE_REGEX = Regex("""\d{4}-\d{2}-\d{2}""")
++        private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
++    }
++}
