@@ -1,0 +1,28 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index c238ae924b..aa24d22ee9 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 19
++    versionCode = 20
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index 84859233e0..2fe82db437 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -209,8 +209,8 @@ abstract class BlackToon :
+     override fun pageListParse(response: Response): List<Page> {
+         val document = response.asJsoup()
+ 
+-        return document.select("#toon_content_imgs img").map {
+-            Page(0, imageUrl = imageUrl(it.attr("o_src")))
++        return document.select("#toon_content_imgs img").mapIndexed { index, element ->
++            Page(index, imageUrl = imageUrl(element.attr("o_src")))
+         }
+     }
+ 
