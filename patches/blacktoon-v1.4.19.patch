@@ -1,0 +1,81 @@
+diff --git a/src/ko/blacktoon/build.gradle.kts b/src/ko/blacktoon/build.gradle.kts
+index 1dcee8885c..c238ae924b 100644
+--- a/src/ko/blacktoon/build.gradle.kts
++++ b/src/ko/blacktoon/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "BlackToon"
+-    versionCode = 18
++    versionCode = 19
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+index 102ff52c34..84859233e0 100644
+--- a/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
++++ b/src/ko/blacktoon/src/eu/kanade/tachiyomi/extension/ko/blacktoon/BlackToon.kt
+@@ -29,6 +29,7 @@ abstract class BlackToon :
+     ConfigurableSource {
+ 
+     private val cachedDb = mutableMapOf<String, List<SeriesItem>>()
++    private var cachedImageBaseUrls: Pair<String, List<String>>? = null
+ 
+     private val preferences: SharedPreferences = getPreferences(SOURCE_ID)
+ 
+@@ -51,10 +52,38 @@ abstract class BlackToon :
+         return when {
+             cleanPath.startsWith("http://") || cleanPath.startsWith("https://") -> cleanPath
+             cleanPath.startsWith("//") -> "https:$cleanPath"
+-            else -> DEFAULT_IMAGE_BASE_URL + cleanPath.removePrefix("/")
++            else -> getImageBaseUrl() + cleanPath.removePrefix("/")
+         }
+     }
+ 
++    private fun getImageBaseUrl(): String {
++        val cacheKey = baseUrl
++        cachedImageBaseUrls?.takeIf { it.first == cacheKey }?.let { return it.second.first() }
++
++        val config = client.newCall(GET("$baseUrl/data/config.js", headers)).execute().body.string()
++        val imageBaseUrls = getImageDomains(config)
++            .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
++            .map { (url, _) -> if (url.endsWith("/")) url else "$url/" }
++            .ifEmpty { listOf(DEFAULT_IMAGE_BASE_URL) }
++
++        cachedImageBaseUrls = cacheKey to imageBaseUrls
++        return imageBaseUrls.first()
++    }
++
++    private fun getImageDomains(config: String): List<Pair<String, Int>> {
++        val weights = IMG_PERCENT_REGEX.findAll(config).associate { match ->
++            match.groupValues[1] to match.groupValues[2].toInt()
++        }
++
++        return IMG_DOMAIN_REGEX.findAll(config)
++            .map { match ->
++                val suffix = match.groupValues[1].ifEmpty { "1" }
++                match.groupValues[2] to (weights[suffix] ?: 0)
++            }
++            .distinctBy { it.first }
++            .toList()
++    }
++
+     private fun getDb(listIndexes: Set<Int> = ONGOING_LIST_INDEXES): List<SeriesItem> {
+         val cacheKey = "$baseUrl:${listIndexes.sorted().joinToString(",")}"
+         cachedDb[cacheKey]?.let { return it }
+@@ -196,6 +225,7 @@ abstract class BlackToon :
+                 val number = getDomainNumber(newValue as String)
+                 if (number != null) {
+                     cachedDb.clear()
++                    cachedImageBaseUrls = null
+                     Toast.makeText(screen.context, "Domain changed to blacktoon$number.com", Toast.LENGTH_SHORT).show()
+                     true
+                 } else {
+@@ -244,5 +274,7 @@ abstract class BlackToon :
+         private val DOMAIN_REGEX = Regex("""(?:https?://)?blacktoon(\d+)\.com""", RegexOption.IGNORE_CASE)
+         private val POSTER_JS_REGEX = Regex("""var\s+poster_js\s*=\s*["']([^"']+)["']""")
+         private val WEBTOON_SCRIPT_REGEX = Regex("""/data/webtoon/webtoon_(\d+)_(\d+)\.js""")
++        private val IMG_DOMAIN_REGEX = Regex("""var\s+img_domain(\d*)\s*=\s*["']([^"']+)["']""")
++        private val IMG_PERCENT_REGEX = Regex("""var\s+img_per(\d+)\s*=\s*["']?(\d+)["']?""")
+     }
+ }
