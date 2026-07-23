@@ -1,0 +1,68 @@
+diff --git a/src/ko/wfwf/build.gradle.kts b/src/ko/wfwf/build.gradle.kts
+index fe2067de91..43dc829d14 100644
+--- a/src/ko/wfwf/build.gradle.kts
++++ b/src/ko/wfwf/build.gradle.kts
+@@ -4,7 +4,7 @@ plugins {
+ 
+ keiyoushi {
+     name = "Wfwf"
+-    versionCode = 2
++    versionCode = 3
+     contentWarning = ContentWarning.NSFW
+     libVersion = "1.4"
+ 
+diff --git a/src/ko/wfwf/src/eu/kanade/tachiyomi/extension/ko/wfwf/Wfwf.kt b/src/ko/wfwf/src/eu/kanade/tachiyomi/extension/ko/wfwf/Wfwf.kt
+index 38262c47bb..74c149e489 100644
+--- a/src/ko/wfwf/src/eu/kanade/tachiyomi/extension/ko/wfwf/Wfwf.kt
++++ b/src/ko/wfwf/src/eu/kanade/tachiyomi/extension/ko/wfwf/Wfwf.kt
+@@ -92,11 +92,38 @@ abstract class Wfwf :
+         }
+     }
+ 
+-    override fun chapterListRequest(manga: SManga): Request = GET(baseUrl + manga.url, headers)
++    override fun chapterListRequest(manga: SManga): Request = GET("$baseUrl${manga.url}&s=n&pg=1", headers)
++
++    override fun chapterListParse(response: Response): List<SChapter> {
++        val firstDocument = response.asJsoup()
++        val pageCount = getChapterPageCount(firstDocument)
++        val documents = buildList {
++            add(firstDocument)
++            val firstUrl = response.request.url
++            for (page in 2..pageCount) {
++                val pageUrl = firstUrl.newBuilder()
++                    .setQueryParameter("s", "n")
++                    .setQueryParameter("pg", page.toString())
++                    .build()
++                client.newCall(GET(pageUrl, headers)).execute().use { add(it.asJsoup()) }
++            }
++        }
++
++        return documents
++            .flatMap(::chapterListParse)
++            .distinctBy { it.url }
++            .sortedByDescending { chapter -> chapter.url.substringAfter("num=", "0").toIntOrNull() ?: 0 }
++    }
++
++    private fun getChapterPageCount(document: Document): Int {
++        val total = document.selectFirst(".list-header-title")?.text()
++            ?.filter(Char::isDigit)
++            ?.toIntOrNull()
++            ?: document.select("a.ep-item[href*=/view?toon=][href*=num=]").size
++        return ((total + CHAPTERS_PER_PAGE - 1) / CHAPTERS_PER_PAGE).coerceAtLeast(1)
++    }
+ 
+-    override fun chapterListParse(response: Response): List<SChapter> = response.asJsoup().select("a.ep-item[href*=/view?toon=][href*=num=]")
+-        .distinctBy { it.attr("href") }
+-        .sortedByDescending { it.attr("data-num").toIntOrNull() ?: 0 }
++    private fun chapterListParse(document: Document): List<SChapter> = document.select("a.ep-item[href*=/view?toon=][href*=num=]")
+         .map { element ->
+             SChapter.create().apply {
+                 url = element.attr("href")
+@@ -165,6 +192,7 @@ abstract class Wfwf :
+         private const val DEFAULT_DOMAIN_NUMBER = "425"
+         private const val DOMAIN_NUMBER_PREF = "domain_number"
+         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
++        private const val CHAPTERS_PER_PAGE = 100
+         private val DOMAIN_NUMBER_REGEX = Regex("""\d+""")
+         private val DOMAIN_REGEX = Regex("""(?:https?://)?wfwf(\d+)\.com""", RegexOption.IGNORE_CASE)
+         private val DATE_REGEX = Regex("""\d{4}-\d{2}-\d{2}""")
